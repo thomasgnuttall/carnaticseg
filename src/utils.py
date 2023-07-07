@@ -70,3 +70,23 @@ def load_yaml(path):
     with open(path) as f:
         d = yaml.load(f, Loader=yaml.FullLoader)   
     return d
+
+
+def create_if_not_exists(path):
+    """
+    If the directory at <path> does not exist, create it empty
+    """
+    directory = os.path.dirname(path)
+    # Do not try and create directory if path is just a filename
+    if (not os.path.exists(directory)) and (directory != ''):
+        os.makedirs(directory)
+
+
+def cpath(*args):
+    """
+    Wrapper around os.path.join, create path concatenating args and
+    if the containing directories do not exist, create them.
+    """
+    path = os.path.join(*args)
+    create_if_not_exists(path)
+    return path

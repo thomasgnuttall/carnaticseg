@@ -6,16 +6,18 @@ import librosa
 from librosa.onset import onset_detect
 import soundfile as sf
 import pandas as pd
+import numpy as np 
+import matplotlib.pyplot as plt
 
-from utils import load_json, read_txt
-from tools import get_loudness, interpolate_below_length
-from pitch import pitch_seq_to_cents
+from src.utils import load_json, read_txt, cpath
+from src.tools import get_loudness, interpolate_below_length
+from src.pitch import pitch_seq_to_cents
 from scipy.signal import savgol_filter
 from scipy.signal import find_peaks, hilbert
 from scipy.ndimage import gaussian_filter1d
 
 from sklearn.cluster import DBSCAN
-from visualisation import plot_kwargs, plot_subsequence
+from visualisation import get_plot_kwargs, plot_subsequence
 
 # Load saraga dataset mohanam
 import mirdata
@@ -63,6 +65,7 @@ tempo = read_txt(tempo_path) #tempo, matra_interval, sama_interval, matras_per_c
 tonic = read_txt(tonic_path)
 tonic = float(tonic[0].replace('\n',''))
 plot_kwargs = get_plot_kwargs(raga, tonic)
+yticks_dict = plot_kwargs['yticks_dict']
 
 # get sample
 start = sections[sections['section']=='Kalpanā svara']['start'].iloc[0]
@@ -80,7 +83,7 @@ sf.write(kalpana_path, vocal, samplerate=sr)
 
 # Pitch track -> change points
 ftanet_carnatic = compiam.load_model("melody:ftanet-carnatic")
-ftanet_pitch_track = ftanet_carnatic.predict(kalpana_path,)
+ftanet_pitch_track = ftanet_carnatic.predict(vocal_path,)
 
 pitch = ftanet_pitch_track[:,1]
 time = ftanet_pitch_track[:,0]
@@ -179,7 +182,7 @@ plt.savefig('peaks.png')
 plt.close('all')
 
 # Join all segmentation points
-min_in_group = 1
+min_in_group = 3
 
 all_peaks = np.array(
     loudness_peaks_s + 

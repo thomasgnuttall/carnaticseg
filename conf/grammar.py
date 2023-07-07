@@ -3,10 +3,10 @@ grammar = {
   		'arohana': ['S', 'R2', 'G3', 'P', 'D2', 'S'],
   		'avarohana': ['S', 'D2', 'P', 'G3', 'R2', 'S'],
   	},
-  	'gamaka':
+  	'kampita_gamaka':
   		{'type 1': ['G', 'D']},
   	'jaru': 
-  		[('P', 'G')],
+  		[('G', 'R')],
   	'phrase':
   		{
   			'pidi': ['dsrg','grs'],
@@ -66,13 +66,6 @@ gpDpgr-rgpdsd-gpDs-rssddpG-gpD-pds-dsR,
 -dsrG-
 grgPgrs-dgrgsr-drsD-pgpdsDp-gpDpgr-grpgRS-rsDpDS
 """
-
-
-
-
-
-
-
 
 
 

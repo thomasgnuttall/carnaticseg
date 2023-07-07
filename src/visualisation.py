@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import matplotlib.style as style
 import matplotlib.image
 
-from pitch import pitch_seq_to_cents, pitch_to_cents
-from utils import myround
+from src.pitch import pitch_seq_to_cents, pitch_to_cents, cents_to_pitch
+from src.utils import myround, load_yaml
 
 def plot_pitch(
     pitch, times, s_len=None, mask=None, yticks_dict=None, cents=False, 
