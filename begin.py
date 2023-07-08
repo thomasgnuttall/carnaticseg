@@ -17,7 +17,7 @@ from scipy.signal import find_peaks, hilbert
 from scipy.ndimage import gaussian_filter1d
 
 from sklearn.cluster import DBSCAN
-from visualisation import get_plot_kwargs, plot_subsequence
+from src.visualisation import get_plot_kwargs, plot_subsequence
 
 # Load saraga dataset mohanam
 import mirdata
@@ -205,9 +205,11 @@ final_peaks = sorted(final_peaks)
  
 # Plot
 fig, axs = plt.subplots(nrows = 5, figsize=(14, 30))
+
 plt.subplots_adjust(hspace=0.3)
 plt.suptitle('Mati Matiki - Sumithra Vasudev\nKalpanasvara Sample')
 plt.xlabel('Time (s)')
+
 axs[0].plot(time_samp_loudness, loudness_samp)
 axs[0].plot(time_samp_loudness[loudness_peaks], loudness_samp[loudness_peaks],'x')
 axs[1].plot(time_samp_audio, vocal_samp)

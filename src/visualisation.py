@@ -198,3 +198,40 @@ def get_plot_kwargs(raga, tonic, svara_cent_path = "conf/svara_cents.yaml", svar
         'emphasize':['S', 'S ', 'S  ', ' S', '  S'],
         'figsize':(15,4)
     }
+
+
+
+def plot_and_annotate(pitch, time, annotations, path, yticks_dict=None, ylim=(), xlim=(), figsize=(20,4), title=None):
+    
+    fig, ax = plt.subplots()
+    
+    plt.figure(figsize=figsize)
+    plt.plot(time, pitch)
+
+    if yticks_dict:
+        ytick = {k:v for k,v in yticks_dict.items() if v<=max(pitch)}
+        if ylim:
+             ytick = {k:v for k,v in yticks_dict.items() if v>ylim[0]}
+        tick_names = list(ytick.keys())
+        tick_loc = [p for p in ytick.values()]
+        plt.yticks(ticks=tick_loc, labels=tick_names)
+
+    if ylim:
+        plt.ylim(ylim)
+    if xlim:
+        plt.ylim(xlim)
+
+    for a,t in annotations:
+        plt.axvline(t, linestyle='--', color='red', linewidth=1)
+        if a:
+            plt.annotate(a, (t+0.1, max(pitch-20)), rotation=90)
+
+    plt.grid()
+    plt.xlabel('Time (s)')
+    plt.ylabel('Frequency (Hz)')
+    
+    if title:
+        plt.title(tite)
+
+    plt.savefig(path)
+    plt.close('all')

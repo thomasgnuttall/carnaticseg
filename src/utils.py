@@ -1,6 +1,8 @@
 import os
 import json 
 import yaml
+import csv
+import numpy as np
 
 def load_json(path):
     """
@@ -90,3 +92,32 @@ def cpath(*args):
     path = os.path.join(*args)
     create_if_not_exists(path)
     return path
+
+
+def write_pitch_track(pitch_track, path, sep='\t'):
+    """
+    Write pitch contour to tsv at <path>
+    """
+    with open(path,'w') as file:
+        for t, p in pitch_track:
+            file.write(f"{t}{sep}{p}")
+            file.write('\n')
+
+
+def load_pitch_track(path, delim='\t'):
+    """
+    load pitch contour from tsv at <path>
+
+    :param path: path to load pitch contour from
+    :type path: str
+
+    :return: Two numpy arrays of time and pitch values
+    :rtype: tuple(numpy.array, numpy.array)
+    """
+    pitch_track = []
+    with open(path) as fd:
+        rd = csv.reader(fd, delimiter=delim, quotechar='"')
+        for t,p in rd:
+            pitch_track.append([float(t),float(p)])
+
+    return np.array(pitch_track)
