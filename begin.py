@@ -201,6 +201,7 @@ with open(dtw_distances_path,'a') as file:
             print(f'i={i}, j={j}')
             if i <= j:
                 continue
+            
             pat1 = all_svaras[i]['pitch']
             pat2 = all_svaras[j]['pitch']
             

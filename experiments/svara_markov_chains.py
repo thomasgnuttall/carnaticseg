@@ -83,22 +83,33 @@ sequences = [[x for x in s if x] for s in sequences]
 ##############
 # Markov Chain
 ##############
+def transition_matrix(arr, states, n=1):
+    """"
+    Computes the transition matrix from Markov chain sequence of order `n`.
+
+    :param arr: Discrete Markov chain state sequence in discrete time with states in 0, ..., N
+    :param n: Transition order
+    """
+
+    num_arr = [[states.index(y) for y in x] for x in arr]
+
+    n_states = max([x for y in num_arr for x in y])
+    M = np.zeros(shape=(n_states + 1, n_states + 1))
+    for a in num_arr:
+        for (i, j) in zip(a, a[1:]):
+            M[i, j] += 1
+
+    T = (M.T / M.sum(axis=1)).T
+
+    return np.linalg.matrix_power(T, n)
+
 SVARAS = ['sa', 'ri', 'ga', 'ma', 'pa', 'dha', 'ni']
 states = set([x for y in sequences for x in y])
 states = [s for s in SVARAS if s in states]
 
-n = len(states)
-M = [[0]*n for _ in range(n)]
-for seq in sequences:
-    for (i,j) in zip(seq,seq[1:]):
-        M[states.index(i)][states.index(j)] += 1
-
-#now convert to probabilities:
-for row in M:
-    s = sum(row)
-    if s > 0:
-        row[:] = [f/s for f in row]
-
+M1 = transition_matrix(sequences, states, 1)
+M2 = transition_matrix(sequences, states, 2)
+M3 = transition_matrix(sequences, states, 3)
 
 ######
 # Plot
