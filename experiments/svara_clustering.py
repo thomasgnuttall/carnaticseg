@@ -11,18 +11,19 @@ import numpy as np
 import pandas as pd
 import tqdm
 
-from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
-from scipy.spatial.distance import squareform
 from numpy.linalg import norm
 from numpy import dot
 
 from src.dtw import dtw
 from src.tools import compute_novelty_spectrum, get_loudness, interpolate_below_length, get_derivative
-from src.utils import load_audacity_annotations, cpath, write_pkl, write_pitch_track, load_pitch_track, read_txt, load_pkl
+from src.utils import load_audacity_annotations, cpath,  write_pkl, write_pitch_track, load_pitch_track, read_txt, load_pkl
 from src.visualisation import get_plot_kwargs, plot_subsequence
 from src.pitch import pitch_seq_to_cents
 from src.svara import get_svara_dict, get_unique_svaras, pairwise_distances_to_file
 from scipy.signal import savgol_filter
+from src.clustering import duration_clustering, cadence_clustering, hier_clustering
+
+out_dir = cpath('data', 'short_test')
 
 track = '191_Mati_Matiki'
 raga = 'mohanam'
@@ -44,7 +45,6 @@ tonic_path = tracks[track].ctonic_path
 sections_path = tracks[track].sections_path
 tempo_path = tracks[track].tempo_path
 annotations_path = os.path.join('data', 'annotation', f'{track}.txt')
-
 
 
 ###########
@@ -95,9 +95,10 @@ pitch_cents = pitch_seq_to_cents(pitch, tonic)
 #####################
 # Get Svaras Features
 #####################
-svara_dict_path = cpath('data', 'svara_dict', f'{track}.csv')
+svara_dict_path = cpath(out_dir, 'data', 'svara_dict', f'{track}.csv')
 unique_svaras = get_unique_svaras(annotations)
 svara_dict = get_svara_dict(annotations, pitch_cents, timestep, track, path=None)
+
 
 #####
 # DTW
@@ -107,217 +108,80 @@ for svara in unique_svaras:
     print(f'Computing distances for {svara}')
     all_svaras = svara_dict[svara]
     all_ix = list(range(len(all_svaras)))
-    dtw_distances_path = cpath('data', 'dtw_distances', f'{track}', f'{svara}.csv')
-    pairwise_distances_to_file(all_ix, all_svaras, dtw_distances_path)
+    dtw_distances_path = cpath(out_dir, 'data', 'dtw_distances', f'{track}', f'{svara}.csv')
+    pairwise_distances_to_file(all_ix, all_svaras, dtw_distances_path, mean_norm=True)
     distance_paths[svara] = dtw_distances_path
-
-#####
-# DTW
-#####
-#       dtw_diff_distances_path = cpath('data', 'dtw_diff_distances', 'svara', f'{track}', f'{svara}.csv')
-#       try:
-#           print('Removing previous distances file')
-#           os.remove(dtw_diff_distances_path)
-#       except OSError:
-#           pass
-
-#       # i=23
-#       # j=1
-#       # s1 = all_svaras[i]['pitch']
-#       # s2 = all_svaras[j]['pitch']
-
-#       # pi = len(s1)
-#       # pj = len(s2)
-#       # l_longest = max([pi, pj])
-#       # radius = round(l_longest*0.1)
-
-#       # from src.dtw import *
-
-#       ##text=List of strings to be written to file
-#       header = 'index1,index2,dtw'
-#       with open(dtw_diff_distances_path,'a') as file:
-#           file.write(header)
-#           file.write('\n')
-#           for i in tqdm.tqdm(all_ix):
-#               for j in all_ix:
-#                   print(f'i={i}, j={j}')
-#                   if i <= j:
-#                       continue
-#                   pat1 = all_svaras[i]['pitch']
-#                   pat2 = all_svaras[j]['pitch']
-#                   
-#                   pat1,_ = get_derivative(pat1, pat1)
-#                   pat2,_ = get_derivative(pat2, pat2)
-
-#                   pi = len(pat1)
-#                   pj = len(pat2)
-#                   l_longest = max([pi, pj])
-
-#                   path, dtw_val = dtw(pat1, pat2, radius=round(l_longest*0.05))
-#                   l = len(path)
-#                   dtw_norm = dtw_val/l
-
-#                   row = f'{i},{j},{dtw_norm}'
-#                   
-#                   file.write(row)
-#                   file.write('\n')
-
-#       ########
-#       # COSINE
-#       ########
-#       cosine_distances_path = cpath('data', 'cosine_distances', 'svara', f'{track}', f'{svara}.csv')
-#       try:
-#           print('Removing previous distances file')
-#           os.remove(cosine_distances_path)
-#       except OSError:
-#           pass
-
-#       # i=23
-#       # j=1
-#       # s1 = all_svaras[i]['pitch']
-#       # s2 = all_svaras[j]['pitch']
-
-#       # pi = len(s1)
-#       # pj = len(s2)
-#       # l_longest = max([pi, pj])
-#       # radius = round(l_longest*0.1)
-
-#       # from src.dtw import *
-
-#       def get_features(pitch, timestep, window=0.05):
-#           
-#           window = round(window*len(pitch))
-
-#           if window < 1:
-#               window = 1
-
-#           features = {
-#               'max_freq': np.max(pitch),
-#               'min_freq': np.min(pitch),
-#               'std_freq': np.std(pitch),
-#               'mean_freq': np.mean(pitch),
-#               'start_freq': np.mean(pitch[:window]),
-#               'end_freq': np.mean(pitch[-window:])
-#           }
-
-#           return features
-
-#       cosine_similarity = lambda a,b: dot(a, b)/(norm(a)*norm(b))
-
-#       ##text=List of strings to be written to file
-#       header = 'index1,index2,cosine'
-#       with open(cosine_distances_path,'a') as file:
-#           file.write(header)
-#           file.write('\n')
-#           for i in tqdm.tqdm(all_ix):
-#               for j in all_ix:
-#                   print(f'i={i}, j={j}')
-#                   if i <= j:
-#                       continue
-#                   pat1 = all_svaras[i]['pitch']
-#                   pat2 = all_svaras[j]['pitch']
-#                   
-#                   pat1_feat = np.array(list(get_features(pat1, timestep).values()))
-#                   pat2_feat = np.array(list(get_features(pat2, timestep).values()))
-
-#                   cos = 1-cosine_similarity(pat1_feat, pat2_feat)
-
-#                   row = f'{i},{j},{cos}'
-#                   
-#                   file.write(row)
-#                   file.write('\n')
 
 
 #############
 ## Clustering
 #############
-t = 1
-min_in_group = 3
+wl = round(145*0.001/timestep)
+wl = wl if not wl%2 == 0 else wl+1
+
+min_samples = 1 # duration min samp
+eps = 0.05 # duration epsilon
+
+t = 1 # hierarchical clustering t
+min_in_group = 1 # min in group for hierarchical
+
+plot = True # plot final clusters?
+
 cluster_dict = {}
+for svara, sd in svara_dict.items():
+    print(f'Duration clustering, {svara}')
+    cluster_dict[svara] = duration_clustering(sd, eps=0.05)
+    print(f'    {len(cluster_dict[svara])} clusters')
 
-def get_inter_intra(df, dcol):
-    inter = df[df['cluster1']==df['cluster2']][dcol].mean()
-    intra = df[df['cluster1']!=df['cluster2']][dcol].mean()
-    return inter/intra
 
-for svara, distance_path in distance_paths.items():
-    print(f'Clustering {svara}')
-    all_svaras = svara_dict[svara]
-    distances = pd.read_csv(distance_path) # cosine_distances_path, dtw_diff_distances_path, dtw_distances_path
+for svara, clusters in cluster_dict.items():
+    print(f'Cadence clustering, {svara}')
+    new_clusters = []
+    for cluster in clusters:
+        cadclust = cadence_clustering(cluster, svara)
+        new_clusters += cadclust
+    cluster_dict[svara] = new_clusters
+    print(f'    {len(cluster_dict[svara])} clusters')
 
+
+for svara, clusters in cluster_dict.items():
+    print(f'Hierarchical clustering, {svara}')
+    distance_path = distance_paths[svara]
+    distances = pd.read_csv(distance_path)
     distances_flip = distances.copy()
     distances_flip.columns = ['index2', 'index1', 'distance']
     distances = pd.concat([distances, distances_flip])
+    new_clusters = []
+    for cluster in clusters:
+        hier = hier_clustering(cluster, distances, t=t, min_in_group=min_in_group)
+        if hier: # hier can return empty array if min_in_group > 1
+            new_clusters += hier
+    cluster_dict[svara] = new_clusters
+    print(f'    {len(cluster_dict[svara])} clusters')
 
-    dist_piv = distances.pivot("index1", "index2", 'distance').fillna(0)
-    indices = dist_piv.columns
 
-    piv_arr = dist_piv.values
-    X = piv_arr + np.transpose(piv_arr)
+if plot:
+    for svara, clusters in cluster_dict.items():
+        print(f'Plotting {svara} cluster...')
+        for i,cluster in tqdm.tqdm(list(enumerate(clusters))):
+            for j,sd in cluster:
+                p = sd['pitch']
+                p = savgol_filter(p, polyorder=2, window_length=wl, mode='interp')
+                t = [x*timestep for x in range(len(p))]
+                
+                plt.plot(t,p)
+                plt.xlabel('Time (s)')
+                plt.ylabel('Pitch (cents)')
+                path = cpath(out_dir, 'plots', f'{track}', 'clustering', f'{svara}', f'cluster_{i}', f'{j}.png')
+                plt.savefig(path)
+                plt.close('all')
 
-    Z = linkage(squareform(X), 'ward')
-
-    #metrics = []
-    #all_ts = list(np.arange(0, 2, 0.01))
-    #for t in tqdm.tqdm(all_ts):
-    #    clustering = fcluster(Z, t=t, criterion='inconsistent')
-
-    #    clusterer = {x:y for x,y in zip(indices, clustering)}
-
-    #    distances['cluster1'] = distances['index1'].apply(lambda y: clusterer[y])
-    #    distances['cluster2'] = distances['index2'].apply(lambda y: clusterer[y])
-
-    #    metrics.append(get_inter_intra(distances, 'distance'))
-
-    #plot_path = cpath('plots', f'{track}', 'clustering', f'deriv_hierarchical_svara_clustering_{svara}.png')
-
-    #plt.plot(all_ts, metrics)
-    #plt.title('Varying t')
-    #plt.xlabel('t')
-    #plt.ylabel('Ratio of inter:intra cluster distance')
-    #plt.savefig(plot_path)
-    #plt.close('all')
-
-    clustering = fcluster(Z, t=t, criterion='inconsistent', R=None, monocrit=None)
-
-    clus_dir = cpath('plots', str(track), 'clustering', svara)
-
-    try:
-        import shutil
-        shutil.rmtree(clus_dir)
-    except:
-        pass
-
-    count_clust = Counter(clustering)
-    good_clust = [k for k,v in count_clust.items() if v>min_in_group]
-
-    star_clusters = {g:[] for g in good_clust}
-    for i,ix in tqdm.tqdm(list(enumerate(indices))):
-        pt = all_svaras[ix]['pitch']
-        times = [x*timestep for x in range(len(pt))]
-        cluster = clustering[i]
-        if cluster in good_clust:
-            star_clusters[cluster].append((times, pt))
-            path = cpath(clus_dir, str(cluster), f'{i}.png')
-            #plt.plot(times, pt)
-            #plt.savefig(path)
-            #plt.close('all')
-
-    star_clusters_reduced = {}
-
-    for c,tracks in star_clusters.items():
-        all_pitch = [p for t,p in tracks]
-        star_clusters_reduced[c] = all_pitch[0]
-
-    cluster_dict[svara] = star_clusters_reduced
 
 ########################
 ## Get Distance profiles
 ########################
-wl = round(145*0.001/timestep)
-wl = wl if not wl%2 == 0 else wl+1
 distance_profiles = {}
-
+mask = pitch==0
 for svara, star_clusters_reduced in cluster_dict.items():
     print(f'Svara: {svara}')
     distance_profiles[svara] = {c:[] for c,_ in star_clusters_reduced.items()}
@@ -342,7 +206,7 @@ for svara, star_clusters_reduced in cluster_dict.items():
             dtw_norm = dtw_val/l
             distance_profiles[svara][c].append(dtw_norm)
 
-dp_path = cpath('data', 'distance_profiles', f'{track}.pkl')
+dp_path = cpath(out_dir, 'data', 'distance_profiles', f'{track}.pkl')
 write_pkl(distance_profiles, dp_path)
 
 distance_profiles = load_pkl(dp_path)
@@ -388,7 +252,7 @@ for s,ap in distance_profiles.items():
 #       plt.plot(t,p)
 #       plt.xlabel('Time (s)')
 #       plt.ylabel('Pitch (cents)')
-#       path = cpath('plots', f'{track}', 'annotations', 'dha', f'{i}.png')
+#       path = cpath(out_dir, 'plots', f'{track}', 'annotations', 'dha', f'{i}.png')
 #       plt.savefig(path)
 #       plt.close('all')
 
@@ -406,7 +270,7 @@ transcription = pd.DataFrame({
         'label':labels,
     }).sort_values(by='start')
 
-trans_path = cpath('data', 'transcription', f'{track}.txt')
+trans_path = cpath(out_dir, 'data', 'transcription', f'{track}.txt')
 transcription.to_csv(trans_path, index=False, header=False, sep='\t')
 
 #  - Clean up

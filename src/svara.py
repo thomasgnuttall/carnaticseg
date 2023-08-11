@@ -30,6 +30,23 @@ def get_svara_dict(annotations, pitch_cents, timestep, track, min_length=0.145, 
         end = row['end']
         label = row['label'].strip().lower()
         duration = end-start
+        if i != 0:
+            prev = annotations.iloc[i-1]
+            if start - prev['end'] < 2:
+                prev_svara = prev['label'].strip().lower()
+            else:
+                prev_svara = 'silence'
+        else:
+            prev_svara = None
+
+        if i != len(annotations)-1:
+            nex = annotations.iloc[i+1]
+            if nex['start'] - end < 2:
+                next_svara = nex['label'].strip().lower()
+            else:
+                next_svara = 'silence'
+        else:
+            suc_svara = None
 
         if label not in SVARAS:
             continue
@@ -51,7 +68,9 @@ def get_svara_dict(annotations, pitch_cents, timestep, track, min_length=0.145, 
                 'start': start,
                 'end': end,
                 'duration': duration,
-                'annotation_index': row.index
+                'annotation_index': i,
+                'preceeding_svara': prev_svara,
+                'succeeding_svara': next_svara
             }
 
         if label in svara_dict:
@@ -81,7 +100,7 @@ def get_svara_dict(annotations, pitch_cents, timestep, track, min_length=0.145, 
     return svara_dict
 
 
-def pairwise_distances_to_file(ix, all_svaras, path, r=0.05):
+def pairwise_distances_to_file(ix, all_svaras, path, r=0.05, mean_norm=False):
     try:
         print('Removing previous distances file')
         os.remove(path)
@@ -103,7 +122,7 @@ def pairwise_distances_to_file(ix, all_svaras, path, r=0.05):
                 pj = len(pat2)
                 l_longest = max([pi, pj])
 
-                path, dtw_val = dtw(pat1, pat2, radius=round(l_longest*r))
+                path, dtw_val = dtw(pat1, pat2, radius=round(l_longest*r), mean_norm=mean_norm)
                 l = len(path)
                 dtw_norm = dtw_val/l
 
@@ -111,3 +130,48 @@ def pairwise_distances_to_file(ix, all_svaras, path, r=0.05):
                 
                 file.write(row)
                 file.write('\n')
+
+
+def get_centered_svaras(svara):
+    MASSVARAS = SVARAS + SVARAS + SVARAS
+    occs = [i for i,x in enumerate(MASSVARAS) if x==svara]
+    secocc = occs[1]
+    svaras = MASSVARAS[secocc-3: secocc+4]
+    return svaras
+
+
+
+def asc_desc(n0, n, n2):
+    cent_svara = get_centered_svaras(n)
+    ni = cent_svara.index(n)
+    
+    if n0 not in cent_svara: # i.e. silence or unknown
+        n2i = cent_svara.index(n2)
+        if ni < n2i:
+            return 'asc'
+        elif ni > n2i:
+            return 'desc'
+        else:
+            return 'cp'  
+
+    elif n2 not in cent_svara:
+        n0i = cent_svara.index(n0)
+        if n0i < ni:
+            return 'asc'
+        elif n0i > ni:
+            return 'desc'
+        else:
+            return 'cp'
+
+    elif n0 not in cent_svara and n2 not in cent_svara:
+        return np.nan
+    
+    n0i = cent_svara.index(n0)
+    n2i = cent_svara.index(n2)
+
+    if n0i < ni < n2i:
+        return 'asc'
+    elif n0i > ni > n2i:
+        return 'desc'
+    else:
+        return 'cp'

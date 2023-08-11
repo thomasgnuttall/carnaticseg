@@ -303,3 +303,119 @@ plt.close('all')
 # Grammar analysis
 
 
+
+#####
+# DTW
+#####
+#       dtw_diff_distances_path = cpath(out_dir, 'data', 'dtw_diff_distances', 'svara', f'{track}', f'{svara}.csv')
+#       try:
+#           print('Removing previous distances file')
+#           os.remove(dtw_diff_distances_path)
+#       except OSError:
+#           pass
+
+#       # i=23
+#       # j=1
+#       # s1 = all_svaras[i]['pitch']
+#       # s2 = all_svaras[j]['pitch']
+
+#       # pi = len(s1)
+#       # pj = len(s2)
+#       # l_longest = max([pi, pj])
+#       # radius = round(l_longest*0.1)
+
+#       # from src.dtw import *
+
+#       ##text=List of strings to be written to file
+#       header = 'index1,index2,dtw'
+#       with open(dtw_diff_distances_path,'a') as file:
+#           file.write(header)
+#           file.write('\n')
+#           for i in tqdm.tqdm(all_ix):
+#               for j in all_ix:
+#                   print(f'i={i}, j={j}')
+#                   if i <= j:
+#                       continue
+#                   pat1 = all_svaras[i]['pitch']
+#                   pat2 = all_svaras[j]['pitch']
+#                   
+#                   pat1,_ = get_derivative(pat1, pat1)
+#                   pat2,_ = get_derivative(pat2, pat2)
+
+#                   pi = len(pat1)
+#                   pj = len(pat2)
+#                   l_longest = max([pi, pj])
+
+#                   path, dtw_val = dtw(pat1, pat2, radius=round(l_longest*0.05))
+#                   l = len(path)
+#                   dtw_norm = dtw_val/l
+
+#                   row = f'{i},{j},{dtw_norm}'
+#                   
+#                   file.write(row)
+#                   file.write('\n')
+
+#       ########
+#       # COSINE
+#       ########
+#       cosine_distances_path = cpath(out_dir, 'data', 'cosine_distances', 'svara', f'{track}', f'{svara}.csv')
+#       try:
+#           print('Removing previous distances file')
+#           os.remove(cosine_distances_path)
+#       except OSError:
+#           pass
+
+#       # i=23
+#       # j=1
+#       # s1 = all_svaras[i]['pitch']
+#       # s2 = all_svaras[j]['pitch']
+
+#       # pi = len(s1)
+#       # pj = len(s2)
+#       # l_longest = max([pi, pj])
+#       # radius = round(l_longest*0.1)
+
+#       # from src.dtw import *
+
+#       def get_features(pitch, timestep, window=0.05):
+#           
+#           window = round(window*len(pitch))
+
+#           if window < 1:
+#               window = 1
+
+#           features = {
+#               'max_freq': np.max(pitch),
+#               'min_freq': np.min(pitch),
+#               'std_freq': np.std(pitch),
+#               'mean_freq': np.mean(pitch),
+#               'start_freq': np.mean(pitch[:window]),
+#               'end_freq': np.mean(pitch[-window:])
+#           }
+
+#           return features
+
+#       cosine_similarity = lambda a,b: dot(a, b)/(norm(a)*norm(b))
+
+#       ##text=List of strings to be written to file
+#       header = 'index1,index2,cosine'
+#       with open(cosine_distances_path,'a') as file:
+#           file.write(header)
+#           file.write('\n')
+#           for i in tqdm.tqdm(all_ix):
+#               for j in all_ix:
+#                   print(f'i={i}, j={j}')
+#                   if i <= j:
+#                       continue
+#                   pat1 = all_svaras[i]['pitch']
+#                   pat2 = all_svaras[j]['pitch']
+#                   
+#                   pat1_feat = np.array(list(get_features(pat1, timestep).values()))
+#                   pat2_feat = np.array(list(get_features(pat2, timestep).values()))
+
+#                   cos = 1-cosine_similarity(pat1_feat, pat2_feat)
+
+#                   row = f'{i},{j},{cos}'
+#                   
+#                   file.write(row)
+#                   file.write('\n')
