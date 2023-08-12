@@ -1,10 +1,12 @@
 import os
 import tqdm
 
+import numpy as np
 from scipy.signal import savgol_filter
 
 from src.dtw import dtw
 from src.utils import cpath, write_pkl
+from src.tools import get_derivative
 
 SVARAS = ['sa', 'ri', 'ga', 'ma', 'pa', 'dha', 'ni']
 
@@ -19,6 +21,21 @@ def get_unique_svaras(annotations):
     return [s for s in SVARAS if s in  svaras]
 
 
+def get_gamaka(p, timestep):
+    # gamaka
+    t = [x*timestep for x in range(len(p))]
+    dp, dt = get_derivative(p, t)
+    asign = np.sign(dp)
+    sumchange = sum([1 for i in range(len(asign))[1:] if np.sign(asign[i]) != np.sign(asign[i-1])])
+    if sumchange == 0:
+        gamaka = 'jaaru'
+    elif sumchange == 1:
+        gamaka = 'none'
+    else:
+        gamaka = 'kampita'
+
+    return gamaka
+
 def get_svara_dict(annotations, pitch_cents, timestep, track, min_length=0.145, smooth_window=0.145, path=None, plot_dir=None, verbose=True):
     
     if min_length < smooth_window:
@@ -30,6 +47,23 @@ def get_svara_dict(annotations, pitch_cents, timestep, track, min_length=0.145, 
         end = row['end']
         label = row['label'].strip().lower()
         duration = end-start
+        if i != 0:
+            prev = annotations.iloc[i-1]
+            if start - prev['end'] < 2:
+                prev_svara = prev['label'].strip().lower()
+            else:
+                prev_svara = 'silence'
+        else:
+            prev_svara = None
+
+        if i != len(annotations)-1:
+            nex = annotations.iloc[i+1]
+            if nex['start'] - end < 2:
+                next_svara = nex['label'].strip().lower()
+            else:
+                next_svara = 'silence'
+        else:
+            suc_svara = None
 
         if label not in SVARAS:
             continue
@@ -44,6 +78,9 @@ def get_svara_dict(annotations, pitch_cents, timestep, track, min_length=0.145, 
         wl = round(smooth_window/timestep)
         wl = wl if not wl%2 == 0 else wl+1
         pitch_curve = savgol_filter(pitch_curve, polyorder=2, window_length=wl, mode='interp')
+        pitch_curve = savgol_filter(pitch_curve, polyorder=2, window_length=wl, mode='interp')
+
+        gamaka = get_gamaka(pitch_curve, timestep)
 
         d = {
                 'pitch': pitch_curve,
@@ -51,14 +88,18 @@ def get_svara_dict(annotations, pitch_cents, timestep, track, min_length=0.145, 
                 'start': start,
                 'end': end,
                 'duration': duration,
-                'annotation_index': row.index
+                'annotation_index': i,
+                'preceeding_svara': prev_svara,
+                'succeeding_svara': next_svara,
+                'gamaka': gamaka
             }
 
         if label in svara_dict:
             svara_dict[label].append(d)
         else:
             svara_dict[label] = [d]
-    
+
+
     if verbose:
         for k,v in svara_dict.items():
             print(f'{len(v)} occurrences of {k}')
@@ -81,7 +122,7 @@ def get_svara_dict(annotations, pitch_cents, timestep, track, min_length=0.145, 
     return svara_dict
 
 
-def pairwise_distances_to_file(ix, all_svaras, path, r=0.05):
+def pairwise_distances_to_file(ix, all_svaras, path, r=0.05, mean_norm=False):
     try:
         print('Removing previous distances file')
         os.remove(path)
@@ -103,7 +144,7 @@ def pairwise_distances_to_file(ix, all_svaras, path, r=0.05):
                 pj = len(pat2)
                 l_longest = max([pi, pj])
 
-                path, dtw_val = dtw(pat1, pat2, radius=round(l_longest*r))
+                path, dtw_val = dtw(pat1, pat2, radius=round(l_longest*r), mean_norm=mean_norm)
                 l = len(path)
                 dtw_norm = dtw_val/l
 
@@ -111,3 +152,48 @@ def pairwise_distances_to_file(ix, all_svaras, path, r=0.05):
                 
                 file.write(row)
                 file.write('\n')
+
+
+def get_centered_svaras(svara):
+    MASSVARAS = SVARAS + SVARAS + SVARAS
+    occs = [i for i,x in enumerate(MASSVARAS) if x==svara]
+    secocc = occs[1]
+    svaras = MASSVARAS[secocc-3: secocc+4]
+    return svaras
+
+
+
+def asc_desc(n0, n, n2):
+    cent_svara = get_centered_svaras(n)
+    ni = cent_svara.index(n)
+    
+    if n0 not in cent_svara: # i.e. silence or unknown
+        n2i = cent_svara.index(n2)
+        if ni < n2i:
+            return 'asc'
+        elif ni > n2i:
+            return 'desc'
+        else:
+            return 'cp'  
+
+    elif n2 not in cent_svara:
+        n0i = cent_svara.index(n0)
+        if n0i < ni:
+            return 'asc'
+        elif n0i > ni:
+            return 'desc'
+        else:
+            return 'cp'
+
+    elif n0 not in cent_svara and n2 not in cent_svara:
+        return np.nan
+    
+    n0i = cent_svara.index(n0)
+    n2i = cent_svara.index(n2)
+
+    if n0i < ni < n2i:
+        return 'asc'
+    elif n0i > ni > n2i:
+        return 'desc'
+    else:
+        return 'cp'

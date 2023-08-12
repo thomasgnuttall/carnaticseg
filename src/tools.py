@@ -106,3 +106,4 @@ def get_derivative(pitch, time):
     d_time = time[1:-1]
 
     return d_pitch, d_time
+

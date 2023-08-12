@@ -2,7 +2,7 @@ from tslearn.utils import to_time_series
 import numpy as np
 from numba import njit, prange
 
-def dtw(s1, s2, radius):
+def dtw(s1, s2, radius, mean_norm=False):
     r"""Compute Dynamic Time Warping (DTW) similarity measure between
     (possibly multidimensional) time series and return both the path and the
     similarity.
@@ -82,6 +82,10 @@ def dtw(s1, s2, radius):
 
     if s1.shape[1] != s2.shape[1]:
         raise ValueError("All input time series must have the same feature size.")
+
+    if mean_norm:
+        s1 = (s1-s1.mean(axis=0)) #/s1.std()
+        s2 = (s2-s2.mean(axis=0)) #/s2.std()
 
     sz1 = s1.shape[0]
     sz2 = s2.shape[0]
