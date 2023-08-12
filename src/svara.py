@@ -1,10 +1,12 @@
 import os
 import tqdm
 
+import numpy as np
 from scipy.signal import savgol_filter
 
 from src.dtw import dtw
 from src.utils import cpath, write_pkl
+from src.tools import get_derivative
 
 SVARAS = ['sa', 'ri', 'ga', 'ma', 'pa', 'dha', 'ni']
 
@@ -18,6 +20,21 @@ def get_unique_svaras(annotations):
     svaras = list(set([s.strip().lower() for s in annotations['label']]))
     return [s for s in SVARAS if s in  svaras]
 
+
+def get_gamaka(p, timestep):
+    # gamaka
+    t = [x*timestep for x in range(len(p))]
+    dp, dt = get_derivative(p, t)
+    asign = np.sign(dp)
+    sumchange = sum([1 for i in range(len(asign))[1:] if np.sign(asign[i]) != np.sign(asign[i-1])])
+    if sumchange == 0:
+        gamaka = 'jaaru'
+    elif sumchange == 1:
+        gamaka = 'none'
+    else:
+        gamaka = 'kampita'
+
+    return gamaka
 
 def get_svara_dict(annotations, pitch_cents, timestep, track, min_length=0.145, smooth_window=0.145, path=None, plot_dir=None, verbose=True):
     
@@ -61,6 +78,9 @@ def get_svara_dict(annotations, pitch_cents, timestep, track, min_length=0.145, 
         wl = round(smooth_window/timestep)
         wl = wl if not wl%2 == 0 else wl+1
         pitch_curve = savgol_filter(pitch_curve, polyorder=2, window_length=wl, mode='interp')
+        pitch_curve = savgol_filter(pitch_curve, polyorder=2, window_length=wl, mode='interp')
+
+        gamaka = get_gamaka(pitch_curve, timestep)
 
         d = {
                 'pitch': pitch_curve,
@@ -70,14 +90,16 @@ def get_svara_dict(annotations, pitch_cents, timestep, track, min_length=0.145, 
                 'duration': duration,
                 'annotation_index': i,
                 'preceeding_svara': prev_svara,
-                'succeeding_svara': next_svara
+                'succeeding_svara': next_svara,
+                'gamaka': gamaka
             }
 
         if label in svara_dict:
             svara_dict[label].append(d)
         else:
             svara_dict[label] = [d]
-    
+
+
     if verbose:
         for k,v in svara_dict.items():
             print(f'{len(v)} occurrences of {k}')

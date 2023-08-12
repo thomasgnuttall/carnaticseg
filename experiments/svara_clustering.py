@@ -9,6 +9,7 @@ import mirdata
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import random
 import tqdm
 
 from numpy.linalg import norm
@@ -97,6 +98,7 @@ pitch_cents = pitch_seq_to_cents(pitch, tonic)
 #####################
 svara_dict_path = cpath(out_dir, 'data', 'svara_dict', f'{track}.csv')
 unique_svaras = get_unique_svaras(annotations)
+
 svara_dict = get_svara_dict(annotations, pitch_cents, timestep, track, path=None)
 
 
@@ -159,37 +161,55 @@ for svara, clusters in cluster_dict.items():
     cluster_dict[svara] = new_clusters
     print(f'    {len(cluster_dict[svara])} clusters')
 
-
 if plot:
     for svara, clusters in cluster_dict.items():
         print(f'Plotting {svara} cluster...')
         for i,cluster in tqdm.tqdm(list(enumerate(clusters))):
             for j,sd in cluster:
                 p = sd['pitch']
-                p = savgol_filter(p, polyorder=2, window_length=wl, mode='interp')
+                gamaka = sd['gamaka']
                 t = [x*timestep for x in range(len(p))]
                 
                 plt.plot(t,p)
                 plt.xlabel('Time (s)')
                 plt.ylabel('Pitch (cents)')
-                path = cpath(out_dir, 'plots', f'{track}', 'clustering', f'{svara}', f'cluster_{i}', f'{j}.png')
+                path = cpath(out_dir, 'plots', f'{track}', 'clustering', f'{svara}', f'cluster_{i}', f'{gamaka}_{j}.png')
                 plt.savefig(path)
                 plt.close('all')
+
+
+#########################
+## Pick cluster candidate
+#########################
+final_clusters = {}
+for svara, clusters in cluster_dict.items():
+    print(f'Reducing {svara} clusters to 1 candidate')
+    clusts = []
+    for c in clusters:
+        clusts.append(random.choice(c)[1])
+    final_clusters[svara] = clusts
 
 
 ########################
 ## Get Distance profiles
 ########################
+sample = 60
+
+if sample:
+    sample_pitch_cents = pitch_cents[:round(sample/timestep)]
+else:
+    sample_pitch_cents = pitch_cents
+
 distance_profiles = {}
-mask = pitch==0
-for svara, star_clusters_reduced in cluster_dict.items():
-    print(f'Svara: {svara}')
-    distance_profiles[svara] = {c:[] for c,_ in star_clusters_reduced.items()}
-    for c, unit in list(star_clusters_reduced.items()):
+for svara, clusters in final_clusters.items():
+    print(f'Computing {svara} distance profile')
+    distance_profiles[svara] = {i:[] for i in range(len(clusters))}
+    for c, s in enumerate(clusters):
         print(f'Cluster {c}')
-        for i in tqdm.tqdm(list(range(len(pitch_cents)))):
-            target = pitch_cents[i:i+len(unit)]
-            if len(target) <= wl:
+        unit = s['pitch']
+        for i in tqdm.tqdm(list(range(len(sample_pitch_cents)))):
+            target = sample_pitch_cents[i:i+len(unit)]
+            if len(target) < wl:
                 break
             target = savgol_filter(target, polyorder=2, window_length=wl, mode='interp')
 
@@ -214,7 +234,7 @@ distance_profiles = load_pkl(dp_path)
 ###########
 ## Annotate
 ###########
-annot_dist_thresh = 15
+annot_dist_thresh = 10
 
 occurences = []
 distances = []
@@ -222,14 +242,14 @@ lengths = []
 labels = []
 
 for s,ap in distance_profiles.items():
-    print(f'Svara: {s}')
+    print(f'Annotating svara, {s}')
     for i in ap:
         dp = np.array(ap[i]).copy()
 
         max_dist = 0
         while max_dist < annot_dist_thresh:
             
-            l = len(cluster_dict[s][i])
+            l = len(final_clusters[s][i]['pitch'])
             
             ix = dp.argmin()
             dist = dp[ix]
@@ -243,20 +263,10 @@ for s,ap in distance_profiles.items():
 
             max_dist = dist
 
+###########
+## Clean Up
+###########
 
-
-#   for i,o in tqdm.tqdm(list(enumerate(occurences))):
-#       p = pitch_cents[o:o+len(unit)]
-#       p = savgol_filter(p, polyorder=2, window_length=wl, mode='interp')
-#       t = [(o+x)*timestep for x in range(len(p))]
-#       plt.plot(t,p)
-#       plt.xlabel('Time (s)')
-#       plt.ylabel('Pitch (cents)')
-#       path = cpath(out_dir, 'plots', f'{track}', 'annotations', 'dha', f'{i}.png')
-#       plt.savefig(path)
-#       plt.close('all')
-
-#distance_profile = stumpy.mass(unit, pitch_cents, normalize=False)
 
 
 #########
