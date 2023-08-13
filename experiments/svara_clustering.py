@@ -127,7 +127,7 @@ eps = 0.05 # duration epsilon
 t = 1 # hierarchical clustering t
 min_in_group = 1 # min in group for hierarchical
 
-plot = True # plot final clusters?
+plot = False # plot final clusters?
 
 cluster_dict = {}
 for svara, sd in svara_dict.items():
@@ -193,7 +193,7 @@ for svara, clusters in cluster_dict.items():
 ########################
 ## Get Distance profiles
 ########################
-sample = 60
+sample = 30
 
 if sample:
     sample_pitch_cents = pitch_cents[:round(sample/timestep)]
@@ -234,16 +234,17 @@ distance_profiles = load_pkl(dp_path)
 ###########
 ## Annotate
 ###########
-annot_dist_thresh = 10
+annot_dist_thresh = 0.005
 
 occurences = []
 distances = []
 lengths = []
 labels = []
-
+gamakas = []
 for s,ap in distance_profiles.items():
     print(f'Annotating svara, {s}')
-    for i in ap:
+    for ix,i in enumerate(ap):
+        gamaka = svara_dict[s][ix]['gamaka']
         dp = np.array(ap[i]).copy()
 
         max_dist = 0
@@ -260,24 +261,105 @@ for s,ap in distance_profiles.items():
             lengths.append(l)
             occurences.append(ix)
             labels.append(s)
+            gamakas.append(gamaka)
 
             max_dist = dist
+
+occurences = np.array(occurences)
+distances = np.array(distances)
+lengths = np.array(lengths)
+labels = np.array(labels)
+gamakas = np.array(gamakas)
 
 ###########
 ## Clean Up
 ###########
+def get_overlap(x0, x1, y0, y1):
+    
+    ix0 = set(range(x0, x1+1))
+    ix1 = set(range(y0, y1+1))
+    
+    inters = ix1.intersection(ix0)
 
+    o1 = len(inters)/len(ix0)
+    o2 = len(inters)/len(ix1)
+    
+    return o1, o2
+
+
+def do_patterns_overlap(x0, x1, y0, y1, perc_overlap=None):
+    
+    o1, o2 = get_overlap(x0, x1, y0, y1)
+
+    if perc_overlap:
+        return o1>perc_overlap and o2>perc_overlap
+    else:
+        return o1 > 0 and o2 > 0
+
+
+def reduce_labels(occurences, labels, lengths, distances, gamakas):
+    ex_svaras = set(labels)
+
+    reduced_occ = []
+    reduced_len = []
+    reduced_gam = []
+    reduced_dist = []
+    reduced_labs = []
+    for s in ex_svaras:
+        ix = np.where(labels==s)[0]
+        ix = sorted(ix, key=lambda y: occurences[y])
+        occs = occurences[ix]
+        lens = lengths[ix]
+        dist = distances[ix]
+        gama = gamakas[ix]
+
+        batches = [[0]] # first occurence in batch automatically
+        for i in range(len(occs))[1:]:
+            o0 = occs[i-1]
+            o1 = occs[i]
+            l0 = lens[i-1]
+            l1 = lens[i]
+            overlap = do_patterns_overlap(o0, o0+l0, o1, o1+l1)
+            if overlap:
+                # append to existing batch
+                batches[-1].append(i)
+            else:
+                # create new batch
+                batches.append([i])
+
+        
+        # take longest of each batch
+        for b in batches:
+            min_t = min(occs[b])
+            max_t = max(occs[b]+lens[b])
+            reduced_occ.append(min_t) 
+            reduced_len.append(max_t-min_t)
+            reduced_labs.append(s)
+
+    return reduced_occ, reduced_len, reduced_gam, reduced_dist, reduced_labs
+
+occs, lens, gams, dists, labs = reduce_labels(occurences, labels, lengths, distances, gamakas)
+# join identical svaras
+    # record gamaka
+    # record distances
+
+# sort out borders
+    # if overlap is small adjust based on distance
+    # if overlap is large chose most likely based on neighbours
+    # if overlap is large and no neighbour chose most lowest distance
+
+# pass through and highlight errors as per avro aro
 
 
 #########
 ## Export
 #########
-starts = [o*timestep for o in occurences]
-ends   = [starts[i]+(lengths[i]*timestep) for i in range(len(starts))]
+starts = [o*timestep for o in occs]
+ends   = [starts[i]+(lens[i]*timestep) for i in range(len(starts))]
 transcription = pd.DataFrame({
         'start':starts,
         'end':ends,
-        'label':labels,
+        'label':labs,
     }).sort_values(by='start')
 
 trans_path = cpath(out_dir, 'data', 'transcription', f'{track}.txt')
