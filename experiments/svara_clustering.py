@@ -127,7 +127,7 @@ eps = 0.05 # duration epsilon
 t = 1 # hierarchical clustering t
 min_in_group = 1 # min in group for hierarchical
 
-plot = True # plot final clusters?
+plot = False # plot final clusters?
 
 cluster_dict = {}
 for svara, sd in svara_dict.items():
@@ -193,7 +193,7 @@ for svara, clusters in cluster_dict.items():
 ########################
 ## Get Distance profiles
 ########################
-sample = 60
+sample = 30
 
 if sample:
     sample_pitch_cents = pitch_cents[:round(sample/timestep)]
@@ -240,10 +240,11 @@ occurences = []
 distances = []
 lengths = []
 labels = []
-
+gamakas = []
 for s,ap in distance_profiles.items():
     print(f'Annotating svara, {s}')
-    for i in ap:
+    for ix,i in enumerate(ap):
+        gamaka = svara_dict[s][ix]['gamaka']
         dp = np.array(ap[i]).copy()
 
         max_dist = 0
@@ -260,24 +261,132 @@ for s,ap in distance_profiles.items():
             lengths.append(l)
             occurences.append(ix)
             labels.append(s)
+            gamakas.append(gamaka)
 
             max_dist = dist
+
+occurences = np.array(occurences)
+distances = np.array(distances)
+lengths = np.array(lengths)
+labels = np.array(labels)
+gamakas = np.array(gamakas)
 
 ###########
 ## Clean Up
 ###########
+def reduce_labels(occurences, labels, lengths, distances, gamakas, timestep, ovl=0.5, chunk_size_seconds=0.1):
+    chunk_size = round(chunk_size_seconds/timestep)
+    chunkovl = chunk_size*ovl
+    starts = occurences
+    ends = starts + lengths
+    l_track = ends.max()
+
+    occs = []
+    lens = []
+    gams = []
+    dists = []
+    labs = []
+    for i1 in np.arange(0, l_track, chunk_size):
+        i2 = i1 + chunk_size
+
+        # start before end during
+        sbed = ((starts <= i1) & (ends >= i1) & (ends <= i2))
+        # occupy at least <ovl> of the chunk?
+        oalo1 = sbed & (ends - i1 > chunkovl)
+        
+        # start during end after
+        sdea = ((starts >= i1) & (starts <= i2) & (ends >= i2))
+        # occupy at least <ovl> of the chunk?
+        oalo2 = sdea & (abs(starts - i2) > chunkovl)
+
+        # start during end during
+        sded = ((starts >= i1) & (starts <= i2) & (ends >= i1) & (ends <= i2))
+        # occupy at least <ovl> of the chunk?
+        oalo3 = sded & (starts - ends > chunkovl)
+
+        # start before end after
+        sbea = ((starts <= i1) & (ends >= i2))
+
+        # occupy at least <ovl> of the chunk?
+        oalo = oalo1 | oalo2 | oalo2
+
+        all_options = np.where(sbed | sdea | sded | sbea | oalo)[0]
+
+        if len(all_options) > 0:
+            # For chunk select svara with lowest distance
+            winner = np.argmin(distances[all_options])
+            winner_ix = all_options[winner]
+
+            occs.append(i1)
+            lens.append(chunk_size)
+            gams.append(gamakas[winner_ix])
+            dists.append(distances[winner_ix])
+            labs.append(labels[winner_ix])
+
+    return np.array(occs), np.array(labs), np.array(lens), np.array(dists), np.array(gams)
+
+
+def join_neighbouring_svaras(occurences, labels, lengths, distances, gamakas, include_gamaka=True):
+    # make sure in chronological order
+    ix = sorted(range(len(occurences)), key=lambda y: occurences[y])
+    occs = occurences[ix]
+    lens = lengths[ix]
+    dist = distances[ix]
+    gams = gamakas[ix]
+    labs = labels[ix]
+
+    batches = [[0]]
+    for i,_ in enumerate(occurences[1:],1):
+        
+        o1 = occurences[i]
+        o2 = o1 + lens[i]
+        ol = labs[i]
+        og = gams[i]
+
+        p1 = occurences[i-1]
+        p2 = p1 + lens[i-1]
+        pl = labs[i-1]
+        pg = gams[i-1]
+
+        gcheck = (pg == og) if include_gamaka else True
+
+        if (p2 == o1) and (pl == ol) and (pg == og) and gcheck:
+            # append to existing batch
+            batches[-1].append(i)
+        else:
+            # create new batch
+            batches.append([i])
+    
+
+    j_occs = []
+    j_lens = []
+    j_dist = []
+    j_gams = []
+    j_labs = []
+    for batch in batches:
+        j_occs.append(occs[batch].min())
+        j_lens.append(lens[batch].sum())
+        j_dist.append(dist[batch].mean())
+        j_gams.append(gams[batch][0])
+        j_labs.append(labs[batch][0])
+
+    return np.array(j_occs), np.array(j_labs), np.array(j_lens), np.array(j_dist), np.array(j_gams)
+
+occs, labs, lens, dists, gams = reduce_labels(occurences, labels, lengths, distances, gamakas, timestep)
+occs, labs, lens, dists, gams = join_neighbouring_svaras(occs, labs, lens, dists, gams)
+
 
 
 
 #########
 ## Export
 #########
-starts = [o*timestep for o in occurences]
-ends   = [starts[i]+(lengths[i]*timestep) for i in range(len(starts))]
+starts = [o*timestep for o in occs]
+ends   = [starts[i]+(lens[i]*timestep) for i in range(len(starts))]
 transcription = pd.DataFrame({
         'start':starts,
         'end':ends,
-        'label':labels,
+        'label':[f"{l} ({g})" for l,g in zip(labs, gams)],
     }).sort_values(by='start')
 
 trans_path = cpath(out_dir, 'data', 'transcription', f'{track}.txt')
