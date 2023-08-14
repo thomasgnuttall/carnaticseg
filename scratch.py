@@ -419,3 +419,74 @@ plt.close('all')
 #                   
 #                   file.write(row)
 #                   file.write('\n')
+
+
+
+
+######
+def get_overlap(x0, x1, y0, y1):
+    
+    ix0 = set(range(x0, x1+1))
+    ix1 = set(range(y0, y1+1))
+    
+    inters = ix1.intersection(ix0)
+
+    o1 = len(inters)/len(ix0)
+    o2 = len(inters)/len(ix1)
+    
+    return o1, o2
+
+
+def do_patterns_overlap(x0, x1, y0, y1, perc_overlap=None):
+    
+    o1, o2 = get_overlap(x0, x1, y0, y1)
+
+    if perc_overlap:
+        return o1>perc_overlap and o2>perc_overlap
+    else:
+        return o1 > 0 and o2 > 0
+
+
+def reduce_labels(occurences, labels, lengths, distances, gamakas):
+    ex_svaras = set(labels)
+
+    reduced_occ = []
+    reduced_len = []
+    reduced_gam = []
+    reduced_dist = []
+    reduced_labs = []
+    for s in ex_svaras:
+        ix = np.where(labels==s)[0]
+        ix = sorted(ix, key=lambda y: occurences[y])
+        occs = occurences[ix]
+        lens = lengths[ix]
+        dist = distances[ix]
+        gama = gamakas[ix]
+
+        batches = [[0]] # first occurence in batch automatically
+        for i in range(len(occs))[1:]:
+            o0 = occs[i-1]
+            o1 = occs[i]
+            l0 = lens[i-1]
+            l1 = lens[i]
+            overlap = do_patterns_overlap(o0, o0+l0, o1, o1+l1)
+            if overlap:
+                # append to existing batch
+                batches[-1].append(i)
+            else:
+                # create new batch
+                batches.append([i])
+
+        
+        # take longest of each batch
+        for b in batches:
+            min_t = min(occs[b])
+            max_t = max(occs[b]+lens[b])
+            reduced_occ.append(min_t) 
+            reduced_len.append(max_t-min_t)
+            reduced_labs.append(s)
+
+    return reduced_occ, reduced_len, reduced_gam, reduced_dist, reduced_labs
+
+#occs, lens, gams, dists, labs = reduce_labels(occurences, labels, lengths, distances, gamakas)
+occs, lens, gams, dists, labs = occurences, lengths, gamakas, distances, labels

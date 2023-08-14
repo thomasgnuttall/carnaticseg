@@ -234,7 +234,7 @@ distance_profiles = load_pkl(dp_path)
 ###########
 ## Annotate
 ###########
-annot_dist_thresh = 0.005
+annot_dist_thresh = 10
 
 occurences = []
 distances = []
@@ -274,81 +274,108 @@ gamakas = np.array(gamakas)
 ###########
 ## Clean Up
 ###########
-def get_overlap(x0, x1, y0, y1):
-    
-    ix0 = set(range(x0, x1+1))
-    ix1 = set(range(y0, y1+1))
-    
-    inters = ix1.intersection(ix0)
+def reduce_labels(occurences, labels, lengths, distances, gamakas, timestep, ovl=0.5, chunk_size_seconds=0.1):
+    chunk_size = round(chunk_size_seconds/timestep)
+    chunkovl = chunk_size*ovl
+    starts = occurences
+    ends = starts + lengths
+    l_track = ends.max()
 
-    o1 = len(inters)/len(ix0)
-    o2 = len(inters)/len(ix1)
-    
-    return o1, o2
+    occs = []
+    lens = []
+    gams = []
+    dists = []
+    labs = []
+    for i1 in np.arange(0, l_track, chunk_size):
+        i2 = i1 + chunk_size
 
-
-def do_patterns_overlap(x0, x1, y0, y1, perc_overlap=None):
-    
-    o1, o2 = get_overlap(x0, x1, y0, y1)
-
-    if perc_overlap:
-        return o1>perc_overlap and o2>perc_overlap
-    else:
-        return o1 > 0 and o2 > 0
-
-
-def reduce_labels(occurences, labels, lengths, distances, gamakas):
-    ex_svaras = set(labels)
-
-    reduced_occ = []
-    reduced_len = []
-    reduced_gam = []
-    reduced_dist = []
-    reduced_labs = []
-    for s in ex_svaras:
-        ix = np.where(labels==s)[0]
-        ix = sorted(ix, key=lambda y: occurences[y])
-        occs = occurences[ix]
-        lens = lengths[ix]
-        dist = distances[ix]
-        gama = gamakas[ix]
-
-        batches = [[0]] # first occurence in batch automatically
-        for i in range(len(occs))[1:]:
-            o0 = occs[i-1]
-            o1 = occs[i]
-            l0 = lens[i-1]
-            l1 = lens[i]
-            overlap = do_patterns_overlap(o0, o0+l0, o1, o1+l1)
-            if overlap:
-                # append to existing batch
-                batches[-1].append(i)
-            else:
-                # create new batch
-                batches.append([i])
-
+        # start before end during
+        sbed = ((starts <= i1) & (ends >= i1) & (ends <= i2))
+        # occupy at least <ovl> of the chunk?
+        oalo1 = sbed & (ends - i1 > chunkovl)
         
-        # take longest of each batch
-        for b in batches:
-            min_t = min(occs[b])
-            max_t = max(occs[b]+lens[b])
-            reduced_occ.append(min_t) 
-            reduced_len.append(max_t-min_t)
-            reduced_labs.append(s)
+        # start during end after
+        sdea = ((starts >= i1) & (starts <= i2) & (ends >= i2))
+        # occupy at least <ovl> of the chunk?
+        oalo2 = sdea & (abs(starts - i2) > chunkovl)
 
-    return reduced_occ, reduced_len, reduced_gam, reduced_dist, reduced_labs
+        # start during end during
+        sded = ((starts >= i1) & (starts <= i2) & (ends >= i1) & (ends <= i2))
+        # occupy at least <ovl> of the chunk?
+        oalo3 = sded & (starts - ends > chunkovl)
 
-occs, lens, gams, dists, labs = reduce_labels(occurences, labels, lengths, distances, gamakas)
-# join identical svaras
-    # record gamaka
-    # record distances
+        # start before end after
+        sbea = ((starts <= i1) & (ends >= i2))
 
-# sort out borders
-    # if overlap is small adjust based on distance
-    # if overlap is large chose most likely based on neighbours
-    # if overlap is large and no neighbour chose most lowest distance
+        # occupy at least <ovl> of the chunk?
+        oalo = oalo1 | oalo2 | oalo2
 
-# pass through and highlight errors as per avro aro
+        all_options = np.where(sbed | sdea | sded | sbea | oalo)[0]
+
+        if len(all_options) > 0:
+            # For chunk select svara with lowest distance
+            winner = np.argmin(distances[all_options])
+            winner_ix = all_options[winner]
+
+            occs.append(i1)
+            lens.append(chunk_size)
+            gams.append(gamakas[winner_ix])
+            dists.append(distances[winner_ix])
+            labs.append(labels[winner_ix])
+
+    return np.array(occs), np.array(labs), np.array(lens), np.array(dists), np.array(gams)
+
+
+def join_neighbouring_svaras(occurences, labels, lengths, distances, gamakas, include_gamaka=True):
+    # make sure in chronological order
+    ix = sorted(range(len(occurences)), key=lambda y: occurences[y])
+    occs = occurences[ix]
+    lens = lengths[ix]
+    dist = distances[ix]
+    gams = gamakas[ix]
+    labs = labels[ix]
+
+    batches = [[0]]
+    for i,_ in enumerate(occurences[1:],1):
+        
+        o1 = occurences[i]
+        o2 = o1 + lens[i]
+        ol = labs[i]
+        og = gams[i]
+
+        p1 = occurences[i-1]
+        p2 = p1 + lens[i-1]
+        pl = labs[i-1]
+        pg = gams[i-1]
+
+        gcheck = (pg == og) if include_gamaka else True
+
+        if (p2 == o1) and (pl == ol) and (pg == og) and gcheck:
+            # append to existing batch
+            batches[-1].append(i)
+        else:
+            # create new batch
+            batches.append([i])
+    
+
+    j_occs = []
+    j_lens = []
+    j_dist = []
+    j_gams = []
+    j_labs = []
+    for batch in batches:
+        j_occs.append(occs[batch].min())
+        j_lens.append(lens[batch].sum())
+        j_dist.append(dist[batch].mean())
+        j_gams.append(gams[batch][0])
+        j_labs.append(labs[batch][0])
+
+    return np.array(j_occs), np.array(j_labs), np.array(j_lens), np.array(j_dist), np.array(j_gams)
+
+occs, labs, lens, dists, gams = reduce_labels(occurences, labels, lengths, distances, gamakas, timestep)
+occs, labs, lens, dists, gams = join_neighbouring_svaras(occs, labs, lens, dists, gams)
+
+
 
 
 #########
@@ -359,7 +386,7 @@ ends   = [starts[i]+(lens[i]*timestep) for i in range(len(starts))]
 transcription = pd.DataFrame({
         'start':starts,
         'end':ends,
-        'label':labs,
+        'label':[f"{l} ({g})" for l,g in zip(labs, gams)],
     }).sort_values(by='start')
 
 trans_path = cpath(out_dir, 'data', 'transcription', f'{track}.txt')
